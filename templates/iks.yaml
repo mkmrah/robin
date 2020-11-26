@@ -1,0 +1,16 @@
+apiVersion: robin.io/v1alpha1
+kind: RobinCluster
+metadata:
+  name: "{{ .Release.Name }}"
+  namespace: "{{ .Release.Namespace }}"
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+spec:
+  image_robin: "{{ .Values.robinimage.repository}}/{{ .Values.robinimage.image}}:{{ .Values.robinimage.tag}}"
+  host_type: "{{ .Values.host.type}}"
+  k8s_provider: "{{ .Values.k8sprovider.value}}"
+  options:
+    update_coredns: "1"
+---

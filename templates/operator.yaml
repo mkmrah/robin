@@ -1,0 +1,548 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    robin.io/domain: ROBIN
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+  name: robin-admin
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: '{{ printf "%s" .Release.Name }}'
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: '{{ printf "%s" .Release.Name }}'
+    namespace: "{{ .Release.Namespace }}"
+
+---
+
+# Attacher must be able to work with PVs, nodes and VolumeAttachments
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: external-attacher-runner
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["csi.storage.k8s.io"]
+    resources: ["csinodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments/status"]
+    verbs: ["patch"]
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-attacher-role
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+subjects:
+  - kind: ServiceAccount
+    name: csi-attacher
+    namespace: "{{ .Release.Namespace }}"
+roleRef:
+  kind: ClusterRole
+  name: external-attacher-runner
+  apiGroup: rbac.authorization.k8s.io
+ 
+---
+
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-nodeplugin
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["csi.storage.k8s.io"]
+    resources: ["csidrivers"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "create", "delete"]
+
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-nodeplugin
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+subjects:
+  - kind: ServiceAccount
+    name: csi-nodeplugin
+    namespace: "{{ .Release.Namespace }}"
+roleRef:
+  kind: ClusterRole
+  name: csi-nodeplugin
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: external-provisioner-runner
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots"]
+    verbs: ["get", "list"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents"]
+    verbs: ["get", "list"]
+  - apiGroups: ["csi.storage.k8s.io"]
+    resources: ["csinodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-provisioner-role
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+subjects:
+  - kind: ServiceAccount
+    name: csi-provisioner
+    namespace: "{{ .Release.Namespace }}"
+roleRef:
+  kind: ClusterRole
+  name: external-provisioner-runner
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: external-resizer-runner
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+rules:
+  # The following rule should be uncommented for plugins that require secrets
+  # for provisioning.
+  # - apiGroups: [""]
+  #   resources: ["secrets"]
+  #   verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims/status"]
+    verbs: ["patch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-resizer-role
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+subjects:
+  - kind: ServiceAccount
+    name: csi-resizer
+    namespace: "{{ .Release.Namespace }}"
+roleRef:
+  kind: ClusterRole
+  name: external-resizer-runner
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: external-snapshotter-runner
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents"]
+    verbs: ["create","get", "list", "watch","update", "delete"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots"]
+    verbs: ["get", "list", "watch","update"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots/status"]
+    verbs: ["update"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["create","get", "list", "watch","delete", "update"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents/status"]
+    verbs: ["update"]
+
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-snapshotter-role
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+subjects:
+  - kind: ServiceAccount
+    name: csi-snapshotter
+    namespace: "{{ .Release.Namespace }}"
+roleRef:
+  kind: ClusterRole
+  name: external-snapshotter-runner
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+    name: robin
+    labels:
+        app.kubernetes.io/instance: robin
+        app.kubernetes.io/managed-by: robin.io
+        app.kubernetes.io/name: robin
+provisioner: robin
+reclaimPolicy: Delete
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: '{{ printf "%s-operator" .Release.Name }}'
+  namespace: "{{ .Release.Namespace }}"
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - nodes
+  - services
+  - endpoints
+  - persistentvolumeclaims
+  - events
+  - configmaps
+  - secrets
+  - serviceaccounts
+  verbs:
+  - '*'
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - daemonsets
+  - replicasets
+  - statefulsets
+  verbs:
+  - '*'
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - servicemonitors
+  verbs:
+  - get
+  - create
+- apiGroups:
+  - robin.io
+  resources:
+  - '*'
+  verbs:
+  - '*'
+
+---
+
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: '{{ printf "%s-operator" .Release.Name }}'
+  namespace: "{{ .Release.Namespace }}"
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+subjects:
+- kind: ServiceAccount
+  name: '{{ printf "%s-operator" .Release.Name }}'
+  namespace: "{{ .Release.Namespace }}"
+roleRef:
+  kind: Role
+  name: '{{ printf "%s-operator" .Release.Name }}'
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: '{{ printf "%s-operator" .Release.Name }}'
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - list
+  - get
+  - watch
+- apiGroups:
+  - "rbac.authorization.k8s.io"
+  resources:
+  - clusterroles
+  - clusterrolebindings
+  verbs:
+  - '*'
+- apiGroups: 
+  - "storage.k8s.io"
+  resources: 
+  - storageclasses
+  verbs: 
+  - '*'
+
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: '{{ printf "%s-operator" .Release.Name }}'
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+roleRef:
+  # This is added to create CSI cluster role
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: '{{ printf "%s-operator" .Release.Name }}'
+  namespace: "{{ .Release.Namespace }}"
+
+
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: '{{ printf "%s-operator" .Release.Name }}'
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+  namespace: "{{ .Release.Namespace }}"
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: '{{ printf "%s-operator" .Release.Name }}'
+  namespace: "{{ .Release.Namespace }}"
+  labels:
+    app: "{{ .Chart.Name }}"
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: '{{ printf "%s-operator" .Release.Name }}'
+  template:
+    metadata:
+      annotations:
+        productID: 694dbfaf-3351-483d-b0d1-4d576d123fc7
+        productName: ROBIN_PRODUCT_NAME
+        productVersion: 5.3.2
+      labels:
+        name: '{{ printf "%s-operator" .Release.Name }}'
+        app.kubernetes.io/instance: robin
+        app.kubernetes.io/managed-by: robin.io
+        app.kubernetes.io/name: robin
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      serviceAccountName: '{{ printf "%s-operator" .Release.Name }}'
+      hostIPC: false
+      hostNetwork: false
+      hostPID: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+        - name: '{{ printf "%s-operator" .Release.Name }}'
+          # Replace this with the built image name
+          image: "{{ .Values.operatorimage.repository}}/{{ .Values.operatorimage.image}}:{{ .Values.operatorimage.tag}}"
+          readinessProbe:
+            exec:
+              command:
+              - id
+            initialDelaySeconds: 2
+            periodSeconds: 2
+          livenessProbe:
+            failureThreshold: 5
+            exec:
+              command:
+              - id
+            initialDelaySeconds: 30
+            timeoutSeconds: 3
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: 1
+              memory: 500Mi
+            requests:
+              cpu: 100m
+              memory: 200Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: false
+          env:
+            - name: WATCH_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: '{{ printf "%s-operator" .Release.Name }}'
+
+---

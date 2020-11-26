@@ -1,0 +1,39 @@
+apiVersion: manage.robin.io/v1
+kind: RobinCluster
+metadata:
+  name: "{{ .Release.Name }}"
+  namespace: "{{ .Release.Namespace }}"
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+spec:
+  image_robin: "{{ .Values.robinimage.repository}}/{{ .Values.robinimage.image}}:{{ .Values.robinimage.tag}}"
+  storage_disks: count={{ .Values.resources.disks.count}},type=pd-ssd,size={{ .Values.resources.disks.size}}
+  k8s_provider: "{{ .Values.k8sprovider.value}}"
+  host_type: "{{ .Values.host.type}}"
+  # kms: robin/google
+  # kms_keyring: <keyring_name>
+  
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name:  'robin-admin'
+  namespace: "{{ .Release.Namespace }}"
+  labels:
+    app.kubernetes.io/instance: robin
+    app.kubernetes.io/managed-by: robin.io
+    app.kubernetes.io/name: robin
+spec:
+  ports:
+  - name: rcmserver
+    port: 29442
+    protocol: TCP
+    targetPort: 29442
+  selector:
+    robin.io/robinrole: master
+  type: LoadBalancer
+
+---
